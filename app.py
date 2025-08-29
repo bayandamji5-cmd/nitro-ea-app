@@ -1,65 +1,46 @@
-from flask import Flask, request, jsonify
-import uuid
-import hashlib
+from flask import Flask, render_template, request, redirect, url_for, session
+import random
 
 app = Flask(__name__)
+app.secret_key = "supersecretkey"  # Change this for production
 
-# In-memory "database"
-users = {}  # username: {password_hash, license_key}
-licenses = {}  # license_key: username
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-@app.route("/register", methods=["POST"])
-def register():
-    data = request.json
-    username = data.get("username")
-    password = data.get("password")
-    
-    if not username or not password:
-        return jsonify({"error": "Username and password required"}), 400
-    
-    if username in users:
-        return jsonify({"error": "User already exists"}), 400
-    
-    password_hash = hash_password(password)
-    license_key = str(uuid.uuid4())  # generate unique license key
-    
-    users[username] = {
-        "password_hash": password_hash,
-        "license_key": license_key
+# Example EA data
+def get_ea_data():
+    return {
+        "balance": round(random.uniform(1000, 5000), 2),
+        "open_trades": random.randint(0, 5),
+        "buy_signals": random.randint(0, 3),
+        "sell_signals": random.randint(0, 3),
+        "equity": round(random.uniform(1000, 5000), 2)
     }
-    
-    licenses[license_key] = username
-    
-    return jsonify({"message": "User registered", "license_key": license_key})
 
-@app.route("/login", methods=["POST"])
+# Login credentials (for demo purposes)
+USERNAME = "admin"
+PASSWORD = "password"
+
+@app.route("/", methods=["GET", "POST"])
 def login():
-    data = request.json
-    username = data.get("username")
-    password = data.get("password")
-    
-    if not username or not password:
-        return jsonify({"error": "Username and password required"}), 400
-    
-    user = users.get(username)
-    if not user or user["password_hash"] != hash_password(password):
-        return jsonify({"error": "Invalid credentials"}), 401
-    
-    # Return the license key on successful login
-    return jsonify({"license_key": user["license_key"]})
+    if request.method == "POST":
+        username = request.form.get("username")
+        password = request.form.get("password")
+        if username == USERNAME and password == PASSWORD:
+            session["logged_in"] = True
+            return redirect(url_for("dashboard"))
+        else:
+            return render_template("login.html", error="Invalid credentials")
+    return render_template("login.html")
 
-@app.route("/validate_license", methods=["POST"])
-def validate_license():
-    data = request.json
-    license_key = data.get("license_key")
-    
-    if license_key in licenses:
-        return jsonify({"status": "valid", "user": licenses[license_key]})
-    else:
-        return jsonify({"status": "invalid"}), 401
+@app.route("/dashboard")
+def dashboard():
+    if not session.get("logged_in"):
+        return redirect(url_for("login"))
+    data = get_ea_data()
+    return render_template("dashboard.html", data=data)
+
+@app.route("/logout")
+def logout():
+    session.pop("logged_in", None)
+    return redirect(url_for("login"))
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    app.run(debug=True)
